@@ -617,7 +617,7 @@
         <div style="margin-top:12px;">
           <label class="lbl" style="display:block; margin-bottom:6px;">または JSON テキストを貼り付け</label>
           <textarea class="paste-area" id="jsonPaste"
-            placeholder='{"items": [{"symbol": "AW1", "width_mm": 770, "height_mm": 1032, "qty": 4, "glass_type": "FL6"}]}'></textarea>
+            placeholder='{"app": "US_GLASS_ORDER_SHEET_IMPORT", "projectName": "現場名", "companyName": "建築会社名", "items": [{"symbol": "AW1", "glass_type": "FL6", "width_mm": 770, "height_mm": 1032, "qty": 4, "process": "", "note": ""}]}'></textarea>
         </div>
         <div class="flex gap-8 flex-wrap mt-10">
           <button class="btn btn-primary" onclick="parseJSONPaste()">JSON取込</button>
@@ -626,6 +626,15 @@
         <div id="jsonResult"></div>
       </div>
     </div>
+  </div>
+
+  <!-- 積算ツール取込バナー -->
+  <div id="payloadBanner" style="display:none; background:#d1fae5; border:1.5px solid #6ee7b7; border-radius:var(--radius); padding:11px 14px; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+    <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+      <span style="font-size:20px; flex-shrink:0;">✅</span>
+      <span id="payloadBannerText" style="font-size:13px; font-weight:600; color:#065f46;"></span>
+    </div>
+    <button onclick="document.getElementById('payloadBanner').style.display='none'" style="border:none; background:rgba(0,0,0,0.06); border-radius:4px; cursor:pointer; font-size:12px; color:#065f46; padding:4px 8px; font-weight:600; flex-shrink:0;">閉じる</button>
   </div>
 
   <!-- 注文表 -->
@@ -1074,6 +1083,10 @@ function importJSON(json) {
     S.pi.site = json.siteName;
     document.getElementById('piSite').value = json.siteName;
   }
+  if (json.companyName && !S.pi.company) {
+    S.pi.company = json.companyName;
+    document.getElementById('piCompany').value = json.companyName;
+  }
 
   let ok=0, skip=0;
   src.forEach(raw => {
@@ -1402,6 +1415,76 @@ ${rows||'<tr><td colspan="7" style="text-align:center;padding:20px;color:#999">�
   pw.document.close();
 }
 
+// ─── Payload auto-import (from estimation tool) ──────────
+const PAYLOAD_KEY = 'usglass_order_sheet_import_payload';
+
+function checkImportPayload() {
+  let raw;
+  try { raw = localStorage.getItem(PAYLOAD_KEY); } catch { return; }
+  if (!raw) return;
+
+  let json;
+  try { json = JSON.parse(raw); }
+  catch(e) {
+    try { localStorage.removeItem(PAYLOAD_KEY); } catch {}
+    toast('積算ツールのデータが破損しています','err');
+    return;
+  }
+  try { localStorage.removeItem(PAYLOAD_KEY); } catch {}
+
+  if (S.items.length > 0) {
+    const name = json.projectName || json.siteName || '';
+    if (!confirm(`積算ツールからデータを受信しました${name ? '\n現場名: ' + name : ''}。\n現在の明細に追加して取り込みますか？`)) return;
+  }
+
+  importFromPayload(json);
+}
+
+function importFromPayload(json) {
+  let src = null, foundKey = null;
+  for (const k of ARRAY_KEYS) {
+    if (json[k] && Array.isArray(json[k])) { src = json[k]; foundKey = k; break; }
+  }
+  if (!src && Array.isArray(json)) { src = json; foundKey = 'ルート配列'; }
+  if (!src) {
+    toast('積算ツールのデータに明細が見つかりませんでした','warn');
+    return;
+  }
+
+  if (json.projectName && !S.pi.site) {
+    S.pi.site = json.projectName;
+    document.getElementById('piSite').value = json.projectName;
+  }
+  if (json.companyName && !S.pi.company) {
+    S.pi.company = json.companyName;
+    document.getElementById('piCompany').value = json.companyName;
+  }
+
+  let ok=0, skip=0;
+  src.forEach(raw => {
+    const item = convertItem(raw);
+    if (item) { S.items.push({id:uid(),...item}); ok++; }
+    else skip++;
+  });
+
+  renderTable();
+  setDirty();
+
+  const site = json.projectName || S.pi.site || '';
+  showPayloadBanner(site, ok, skip);
+}
+
+function showPayloadBanner(site, ok, skip) {
+  const banner = document.getElementById('payloadBanner');
+  const text   = document.getElementById('payloadBannerText');
+  if (!banner) return;
+  text.textContent =
+    `積算ツールから取込完了${site ? `（${site}）` : ''}：${ok}件を追加しました` +
+    (skip ? `（${skip}件スキップ）` : '');
+  banner.style.display = 'flex';
+  setTimeout(() => { if (banner) banner.style.display = 'none'; }, 12000);
+}
+
 // ─── Auto-save ────────────────────────────────────────────
 setInterval(() => {
   if (dirty && S.items.length > 0) {
@@ -1438,6 +1521,9 @@ function init() {
   }
 
   renderTable();
+
+  // Check for payload sent from estimation tool
+  checkImportPayload();
 }
 
 init();
