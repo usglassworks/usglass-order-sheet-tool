@@ -433,6 +433,53 @@
       .app-title { font-size: 13px; }
       .btn { font-size: 12px; padding: 8px 11px; min-height: 38px; }
     }
+
+    /* ===== OCR Tab ===== */
+    .ocr-drop {
+      border: 2px dashed var(--gray-300); border-radius: 8px;
+      padding: 24px 16px; text-align: center; color: var(--gray-400);
+      cursor: pointer; transition: all 0.2s;
+    }
+    .ocr-drop:hover, .ocr-drop.over {
+      border-color: var(--primary); background: var(--primary-light); color: var(--primary);
+    }
+    .ocr-drop .di { font-size: 36px; margin-bottom: 6px; }
+    #ocrPreview {
+      max-height: 260px; max-width: 100%;
+      border-radius: 6px; border: 1px solid var(--gray-200);
+      object-fit: contain; margin: 10px auto;
+      display: none; cursor: pointer;
+    }
+    .ocr-status { font-size: 13px; min-height: 22px; padding: 6px 0; line-height: 1.5; }
+    .ocr-textarea {
+      font-family: 'SFMono-Regular', 'Courier New', monospace;
+      font-size: 16px !important;
+      min-height: 130px;
+      color: var(--gray-900);
+      background: var(--gray-50);
+      -webkit-user-select: text !important;
+      user-select: text !important;
+      pointer-events: auto !important;
+    }
+    .notice-ocr {
+      background: #fef3c7; border: 1px solid #fcd34d; border-radius: 6px;
+      padding: 10px 13px; font-size: 12px; color: #92400e;
+      margin-bottom: 12px; line-height: 1.7;
+    }
+    .cand-inp {
+      padding: 5px 7px; border: 1.5px solid var(--gray-300);
+      border-radius: 5px; font-size: 13px; font-family: var(--font); width: 100%;
+    }
+    .cand-inp:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px rgba(40,128,216,0.15); }
+    .cand-inp.num { text-align: right; }
+    .ocr-lang-note {
+      font-size: 11px; color: var(--gray-400); padding: 4px 0; line-height: 1.6;
+    }
+    .prog-bar-wrap {
+      height: 4px; background: var(--gray-200); border-radius: 2px; margin-top: 6px; overflow: hidden;
+      display: none;
+    }
+    .prog-bar { height: 100%; background: var(--primary); border-radius: 2px; transition: width 0.3s; width: 0%; }
   </style>
 </head>
 <body>
@@ -443,6 +490,7 @@
 <!-- Hidden file inputs -->
 <input type="file" id="fileJson"     accept=".json" style="display:none" onchange="onFileJson(event)">
 <input type="file" id="fileJsonMain" accept=".json" style="display:none" onchange="onFileJsonMain(event)">
+<input type="file" id="fileOCR"     accept="image/*,.pdf,.heic,.heif" style="display:none" onchange="onFileOCR(event)">
 
 <!-- ===== Header ===== -->
 <header class="app-header">
@@ -534,6 +582,7 @@
         <button class="tab-btn active" data-tab="manual">手入力</button>
         <button class="tab-btn" data-tab="short">ショート入力</button>
         <button class="tab-btn" data-tab="json">JSON取込</button>
+        <button class="tab-btn" data-tab="ocr">📷 OCR取込</button>
       </div>
 
       <!-- 手入力 -->
@@ -624,6 +673,86 @@
           <button class="btn btn-gray" onclick="document.getElementById('jsonPaste').value='';document.getElementById('jsonResult').innerHTML=''">クリア</button>
         </div>
         <div id="jsonResult"></div>
+      </div>
+
+      <!-- OCR取込 -->
+      <div class="tab-pane" id="tab-ocr">
+        <div class="notice-ocr">
+          ⚠️ <strong>OCR読み取り結果は必ず確認してください。</strong><br>
+          発注前に寸法・枚数・ガラス種類を確認してください。OCRは補助ツールです。誤読の可能性があります。
+        </div>
+
+        <!-- 画像アップロード -->
+        <div class="ocr-drop" id="ocrDrop"
+          onclick="document.getElementById('fileOCR').click()"
+          ondrop="onOcrDrop(event)" ondragover="onOcrDragOver(event)" ondragleave="onOcrDragLeave(event)">
+          <div class="di">📷</div>
+          <div style="font-weight:600; margin-bottom:4px;">画像を選択またはここにドロップ</div>
+          <div style="font-size:12px; opacity:.75;">JPEG・PNG・HEIC対応 ／ PDF（1ページ目を自動変換）</div>
+        </div>
+
+        <!-- プレビュー -->
+        <div style="text-align:center;">
+          <img id="ocrPreview" alt="プレビュー" onclick="document.getElementById('fileOCR').click()" title="クリックして画像を変更">
+        </div>
+
+        <!-- OCRボタン + 進捗 -->
+        <div class="flex gap-8 flex-wrap mt-10" style="align-items:center;">
+          <button class="btn btn-primary btn-lg" id="ocrBtn" onclick="runOCR()" disabled>
+            🔍 画像から寸法を読み取る
+          </button>
+          <button class="btn btn-gray btn-sm" onclick="clearOCR()">クリア</button>
+          <div class="ocr-lang-note" style="flex:1; min-width:180px;">
+            初回はJPNデータ（約6MB）をダウンロードします
+          </div>
+        </div>
+        <div class="ocr-status" id="ocrStatus"></div>
+        <div class="prog-bar-wrap" id="progWrap"><div class="prog-bar" id="progBar"></div></div>
+
+        <!-- OCR結果テキストエリア -->
+        <div id="ocrResultSection" style="display:none; margin-top:14px;">
+          <label class="lbl" style="display:block; margin-bottom:5px;">
+            OCR読み取り結果（直接編集できます）
+          </label>
+          <textarea class="ocr-textarea" id="ocrText"
+            autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+            placeholder="OCR結果がここに表示されます。修正してから「寸法を抽出」してください。"></textarea>
+          <div class="flex gap-8 flex-wrap mt-10">
+            <button class="btn btn-primary" onclick="extractDimensions()">📐 寸法を抽出</button>
+            <button class="btn btn-gray" onclick="document.getElementById('ocrText').value=''">テキストをクリア</button>
+          </div>
+        </div>
+
+        <!-- 読み取り候補一覧 -->
+        <div id="candSection" style="display:none; margin-top:18px;">
+          <div class="flex flex-wrap gap-8" style="align-items:center; margin-bottom:10px;">
+            <div style="font-weight:700; font-size:13px;">
+              📋 読み取り候補 &nbsp;<span id="candCount" style="color:var(--primary); font-size:15px;">0</span>件
+            </div>
+            <div style="margin-left:auto; display:flex; gap:6px; flex-wrap:wrap;">
+              <button class="btn btn-success" onclick="addAllCandidates()">✅ すべて注文表へ追加</button>
+            </div>
+          </div>
+          <div style="font-size:11px; color:var(--gray-400); margin-bottom:8px;">
+            内容を確認・編集してから追加してください
+          </div>
+          <div class="tbl-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>品番</th>
+                  <th>ガラス種類</th>
+                  <th class="th-c" style="min-width:68px;">W mm</th>
+                  <th class="th-c" style="min-width:68px;">H mm</th>
+                  <th class="th-c" style="min-width:50px;">枚数</th>
+                  <th>備考</th>
+                  <th class="th-c no-print" style="width:90px;">操作</th>
+                </tr>
+              </thead>
+              <tbody id="candBody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1413,6 +1542,352 @@ ${rows||'<tr><td colspan="7" style="text-align:center;padding:20px;color:#999">�
 <script>window.onload=()=>{window.print();}<\/script>
 </body></html>`);
   pw.document.close();
+}
+
+// ─── OCR ──────────────────────────────────────────────────
+let ocrImageData = null;
+let candidates   = [];
+let tessLoaded   = false;
+let pdfLoaded    = false;
+
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    if (document.querySelector(`script[src="${src}"]`)) { res(); return; }
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = () => rej(new Error('読み込み失敗: ' + src));
+    document.head.appendChild(s);
+  });
+}
+async function ensureTesseract() {
+  if (tessLoaded) return;
+  await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js');
+  tessLoaded = true;
+}
+async function ensurePDFjs() {
+  if (pdfLoaded) return;
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  pdfLoaded = true;
+}
+
+// ── Image / PDF loading ────────────────────────────────────
+function onOcrDragOver(e) { e.preventDefault(); document.getElementById('ocrDrop').classList.add('over'); }
+function onOcrDragLeave()  { document.getElementById('ocrDrop').classList.remove('over'); }
+function onOcrDrop(e) {
+  e.preventDefault();
+  document.getElementById('ocrDrop').classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if (f) handleOCRFile(f);
+}
+function onFileOCR(e) { const f = e.target.files[0]; if (f) handleOCRFile(f); e.target.value = ''; }
+
+async function handleOCRFile(file) {
+  setOcrStatus('ファイルを読み込み中...');
+  const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  if (isPDF) {
+    await loadPDFAsImage(file);
+  } else {
+    loadImageFile(file);
+  }
+}
+
+function loadImageFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    ocrImageData = ev.target.result;
+    showOcrPreview(ocrImageData);
+    setOcrStatus('画像を読み込みました。「画像から寸法を読み取る」を押してください。');
+    document.getElementById('ocrBtn').disabled = false;
+    resetOcrResults();
+  };
+  reader.readAsDataURL(file);
+}
+
+async function loadPDFAsImage(file) {
+  setOcrStatus('PDF を画像化中...');
+  try {
+    await ensurePDFjs();
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const page = await pdf.getPage(1);
+    const vp = page.getViewport({ scale: 2.0 });
+    const canvas = document.createElement('canvas');
+    canvas.width = vp.width; canvas.height = vp.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+    ocrImageData = canvas.toDataURL('image/png');
+    showOcrPreview(ocrImageData);
+    setOcrStatus(`PDF 1ページ目を読み込みました（${Math.round(vp.width)}×${Math.round(vp.height)}px）。「画像から寸法を読み取る」を押してください。`);
+    document.getElementById('ocrBtn').disabled = false;
+    resetOcrResults();
+  } catch(e) {
+    setOcrStatus('PDFの読み込みに失敗しました: ' + e.message, 'err');
+    toast('PDF読み込みエラー','err');
+  }
+}
+
+function showOcrPreview(src) {
+  const img = document.getElementById('ocrPreview');
+  img.src = src; img.style.display = 'block';
+}
+
+function setOcrStatus(msg, type='') {
+  const el = document.getElementById('ocrStatus');
+  const colors = { err:'var(--danger)', ok:'var(--success)', '':'var(--gray-700)' };
+  el.style.color = colors[type] || colors[''];
+  el.textContent = msg;
+}
+
+function setProgress(pct) {
+  const wrap = document.getElementById('progWrap');
+  const bar  = document.getElementById('progBar');
+  if (pct <= 0) { wrap.style.display='none'; bar.style.width='0%'; return; }
+  wrap.style.display = 'block';
+  bar.style.width = Math.min(pct, 100) + '%';
+}
+
+function resetOcrResults() {
+  document.getElementById('ocrResultSection').style.display = 'none';
+  document.getElementById('candSection').style.display = 'none';
+  document.getElementById('ocrText').value = '';
+  candidates = [];
+  setProgress(0);
+}
+
+function clearOCR() {
+  ocrImageData = null; candidates = [];
+  const img = document.getElementById('ocrPreview');
+  img.src = ''; img.style.display = 'none';
+  document.getElementById('ocrBtn').disabled = true;
+  document.getElementById('ocrText').value = '';
+  document.getElementById('ocrResultSection').style.display = 'none';
+  document.getElementById('candSection').style.display = 'none';
+  document.getElementById('fileOCR').value = '';
+  setOcrStatus(''); setProgress(0);
+}
+
+// ── OCR Execution ─────────────────────────────────────────
+async function runOCR() {
+  if (!ocrImageData) { toast('画像を選択してください','warn'); return; }
+
+  const btn = document.getElementById('ocrBtn');
+  btn.disabled = true;
+  setProgress(5);
+  setOcrStatus('Tesseract.js を読み込み中...');
+
+  try {
+    await ensureTesseract();
+
+    setOcrStatus('⏳ 言語データ読み込み中... (初回は約6MB をダウンロードします)');
+    setProgress(10);
+
+    const logger = m => {
+      if (m.status === 'loading language traineddata') {
+        setOcrStatus('📥 言語データダウンロード中...');
+        setProgress(15 + Math.round((m.progress||0) * 30));
+      } else if (m.status === 'initializing tesseract') {
+        setOcrStatus('⚙️ 初期化中...');
+        setProgress(50);
+      } else if (m.status === 'recognizing text') {
+        const pct = 55 + Math.round((m.progress||0) * 40);
+        setOcrStatus(`📊 読み取り中... ${Math.round((m.progress||0)*100)}%`);
+        setProgress(pct);
+      }
+    };
+
+    // v4 API: createWorker(lang, oem, options)
+    const worker = await Tesseract.createWorker(['jpn', 'eng'], 1, { logger });
+
+    setProgress(55);
+    const result = await worker.recognize(ocrImageData);
+    await worker.terminate();
+
+    setProgress(100);
+    const text = result.data.text || '';
+    document.getElementById('ocrText').value = text;
+    document.getElementById('ocrResultSection').style.display = 'block';
+    setOcrStatus('✅ 読み取り完了！結果を確認・編集してから「寸法を抽出」を押してください。', 'ok');
+
+    setTimeout(() => setProgress(0), 800);
+
+    // Auto extract
+    extractDimensions();
+
+  } catch(e) {
+    setOcrStatus('❌ OCRエラー: ' + e.message, 'err');
+    toast('OCR読み取りに失敗しました','err');
+    setProgress(0);
+    console.error('OCR error', e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── Text Normalization ────────────────────────────────────
+function normalizeOcrText(text) {
+  // Full-width → half-width
+  text = text.replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+  // Full-width space
+  text = text.replace(/　/g, ' ');
+  // Dimension separator
+  text = text.replace(/[×xX×]/g, '×');
+  text = text.replace(/\s*×\s*/g, '×');
+  // = sign
+  text = text.replace(/[＝]/g, '=');
+  // Common OCR mistakes for ×
+  text = text.replace(/(\d)\s+X\s+(\d)/g, '$1×$2');
+  text = text.replace(/(\d)\s+x\s+(\d)/g, '$1×$2');
+  return text;
+}
+
+function normalizeGlass(s) {
+  if (!s) return '';
+  s = s.trim();
+  // FL normalization: fl6 → FL6, f6 → FL6
+  s = s.replace(/\bfl(\d+(?:\.\d+)?)/gi, (_, n) => 'FL' + n);
+  s = s.replace(/\bf(\d+)\b/gi, (_, n) => 'FL' + n);
+  // PW
+  s = s.replace(/\bpw\b/gi, 'PW');
+  // fw → PW (common OCR error)
+  s = s.replace(/\bfw\b/gi, 'PW');
+  // すり / スリ normalization
+  s = s.replace(/スリガラス(\d+)ミリ/g, 'すりガラス$1');
+  s = s.replace(/スリガラス(\d+)/g,     'すりガラス$1');
+  s = s.replace(/すりガラス(\d+)ミリ/g, 'すりガラス$1');
+  s = s.replace(/磨りガラス(\d+)/g,     'すりガラス$1');
+  // 型板
+  s = s.replace(/かたいた|カタイタ|形板/gi, '型板');
+  // 網入り
+  s = s.replace(/あみいり|アミイリ|網入/g, '網入り');
+  // Low-E
+  s = s.replace(/low[\s\-]*e/gi, 'Low-E');
+  // 複層
+  s = s.replace(/ふくそう|フクソウ/g, '複層');
+  // mirror
+  s = s.replace(/\bmirror\b/gi, 'ミラー');
+  return s;
+}
+
+// ── Dimension Extraction ──────────────────────────────────
+function extractDimensions() {
+  const raw = document.getElementById('ocrText').value;
+  if (!raw.trim()) { toast('OCRテキストがありません','warn'); return; }
+
+  const norm  = normalizeOcrText(raw);
+  const lines = norm.split('\n').map(l => l.trim()).filter(Boolean);
+
+  const found = [];
+  lines.forEach(line => {
+    const r = parseOcrLine(line);
+    if (r) found.push(r);
+  });
+
+  // Deduplicate by key
+  const seen = new Set();
+  candidates = found.filter(c => {
+    const k = `${c.sym}|${c.w}|${c.h}|${c.qty}|${c.glass}`;
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  });
+
+  renderCandidates();
+
+  if (candidates.length > 0) {
+    document.getElementById('candSection').style.display = 'block';
+    toast(`${candidates.length}件の寸法を抽出しました`, 'ok');
+    document.getElementById('candSection').scrollIntoView({ behavior:'smooth', block:'start' });
+  } else {
+    document.getElementById('candSection').style.display = 'none';
+    toast('寸法パターンが見つかりませんでした。テキストを確認・編集してください','warn');
+  }
+}
+
+function parseOcrLine(line) {
+  // Normalize × one more time
+  line = line.replace(/[xX]/g, '×');
+
+  // Pattern: optional_sym  W×H=qty  optional_rest
+  // W and H: 2–5 digits, qty: 1–3 digits
+  const dm = line.match(/(\d{2,5})\s*×\s*(\d{2,5})\s*=\s*(\d{1,3})/);
+  if (!dm) return null;
+
+  const dimStart = dm.index;
+  const dimEnd   = dm.index + dm[0].length;
+  const sym      = line.substring(0, dimStart).trim().replace(/[^\w　-鿿]/g,'').trim();
+  const w        = parseInt(dm[1]);
+  const h        = parseInt(dm[2]);
+  const qty      = parseInt(dm[3]);
+  const rest     = line.substring(dimEnd).trim();
+
+  // Sanity: glass dims 50–5000mm, qty 1–999
+  if (w < 50 || w > 5000 || h < 50 || h > 5000 || qty < 1 || qty > 999) return null;
+
+  let glass = '', notes = '';
+  if (rest) {
+    const parts = rest.split(/\s+/);
+    glass = normalizeGlass(parts[0]);
+    notes = parts.slice(1).join(' ');
+  }
+
+  return { sym, glass, w, h, qty, proc: '', notes };
+}
+
+// ── Candidate List ────────────────────────────────────────
+function renderCandidates() {
+  const tbody = document.getElementById('candBody');
+  document.getElementById('candCount').textContent = candidates.length;
+
+  if (!candidates.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--gray-400);">候補がありません</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = candidates.map((c, i) => `
+    <tr>
+      <td><input class="cand-inp" type="text"   value="${esc(c.sym)}"   oninput="setCand(${i},'sym',this.value)"   placeholder="品番"></td>
+      <td><input class="cand-inp" type="text"   value="${esc(c.glass)}" oninput="setCand(${i},'glass',this.value)" list="glassOpts" placeholder="ガラス種類"></td>
+      <td><input class="cand-inp num" type="number" value="${c.w}"   oninput="setCand(${i},'w',this.value)"   style="width:68px;"></td>
+      <td><input class="cand-inp num" type="number" value="${c.h}"   oninput="setCand(${i},'h',this.value)"   style="width:68px;"></td>
+      <td><input class="cand-inp num" type="number" value="${c.qty}" oninput="setCand(${i},'qty',this.value)" style="width:50px; text-align:center;"></td>
+      <td><input class="cand-inp" type="text"   value="${esc(c.notes)}" oninput="setCand(${i},'notes',this.value)" placeholder="備考"></td>
+      <td class="td-act no-print" style="white-space:nowrap;">
+        <button class="btn btn-success btn-sm" onclick="addCand(${i})" title="注文表へ追加">＋追加</button>
+        <button class="btn btn-danger btn-icon btn-sm" onclick="delCand(${i})" title="削除" style="margin-left:3px;">🗑</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function setCand(i, field, val) {
+  if (!candidates[i]) return;
+  if (field === 'w' || field === 'h' || field === 'qty') candidates[i][field] = parseInt(val) || candidates[i][field];
+  else candidates[i][field] = val;
+}
+
+function addCand(i) {
+  const c = candidates[i];
+  if (!c) return;
+  S.items.push({ id:uid(), sym:c.sym, glass:c.glass, w:c.w, h:c.h, qty:c.qty, proc:c.proc||'', notes:c.notes||'' });
+  candidates.splice(i, 1);
+  renderCandidates(); renderTable(); setDirty();
+  toast('注文表に追加しました','ok');
+  if (!candidates.length) document.getElementById('candSection').style.display = 'none';
+}
+
+function delCand(i) {
+  candidates.splice(i, 1);
+  renderCandidates();
+  if (!candidates.length) document.getElementById('candSection').style.display = 'none';
+}
+
+function addAllCandidates() {
+  if (!candidates.length) return;
+  candidates.forEach(c => S.items.push({ id:uid(), sym:c.sym, glass:c.glass, w:c.w, h:c.h, qty:c.qty, proc:c.proc||'', notes:c.notes||'' }));
+  const n = candidates.length;
+  candidates = [];
+  renderCandidates(); renderTable(); setDirty();
+  document.getElementById('candSection').style.display = 'none';
+  toast(`${n}件を注文表に追加しました`,'ok');
 }
 
 // ─── Payload auto-import (from estimation tool) ──────────
