@@ -19,9 +19,11 @@
       <button class="btn secondary" id="newProjectBtn" type="button">新規</button>
       <button class="btn secondary" id="saveProjectBtn" type="button">保存</button>
       <button class="btn secondary" id="loadProjectBtn" type="button">読込</button>
+      <button class="btn secondary" id="importJsonBtn" type="button">JSON読込</button>
       <button class="btn primary" id="showPreviewBtn" type="button">PDFプレビュー</button>
     </div>
   </header>
+  <input id="jsonFileInput" type="file" accept=".json,application/json" hidden>
 
   <main>
     <section class="screen active" id="inputScreen" aria-label="入力画面">
@@ -36,8 +38,19 @@
               <input id="projectName" type="text" placeholder="例: ○○邸 ガラス注文">
             </label>
             <label class="field">
-              <span>引取日</span>
-              <input id="pickupDate" type="date">
+              <span>納品日</span>
+              <input id="deliveryDate" type="date">
+            </label>
+            <label class="field">
+              <span>配送 or 引き取り</span>
+              <select id="deliveryMethod">
+                <option value="配送">配送</option>
+                <option value="引き取り">引き取り</option>
+              </select>
+            </label>
+            <label class="field span-all">
+              <span>案件備考</span>
+              <textarea id="projectNote" rows="2" placeholder="案件全体の連絡事項"></textarea>
             </label>
           </div>
         </section>
@@ -48,6 +61,10 @@
             <span class="small-muted">追加した明細が注文票PDFに反映されます</span>
           </div>
           <form class="item-form" id="itemForm">
+            <label class="field">
+              <span>記号</span>
+              <input id="symbol" type="text" placeholder="aw1">
+            </label>
             <label class="field">
               <span>ガラス種類</span>
               <input id="glassType" type="text" list="glassOptions" placeholder="FL6">
@@ -65,8 +82,12 @@
               <input id="quantity" type="number" min="1" inputmode="numeric" value="1">
             </label>
             <label class="field note-field">
-              <span>備考</span>
-              <input id="note" type="text" placeholder="四方糸面、穴あけ等">
+              <span>加工</span>
+              <input id="process" type="text" placeholder="四方糸面">
+            </label>
+            <label class="field note-field">
+              <span>明細備考</span>
+              <input id="note" type="text" placeholder="現場確認、穴あけ等">
             </label>
             <div class="form-actions">
               <button class="btn primary" id="submitItemBtn" type="submit">明細を追加</button>
@@ -123,6 +144,7 @@
               <thead>
                 <tr>
                   <th>No.</th>
+                  <th>記号</th>
                   <th>ガラス種類</th>
                   <th>寸法 W x H</th>
                   <th>数量</th>
@@ -154,18 +176,27 @@
             <strong id="previewProjectName">-</strong>
           </div>
           <div>
-            <span>引取日</span>
-            <strong id="previewPickupDate">-</strong>
+            <span>納品日</span>
+            <strong id="previewDeliveryDate">-</strong>
+          </div>
+          <div>
+            <span>配送区分</span>
+            <strong id="previewDeliveryMethod">配送</strong>
           </div>
           <div>
             <span>合計数量</span>
             <strong id="previewTotalQty">0</strong>
           </div>
         </div>
+        <div class="pdf-note" id="previewProjectNoteWrap">
+          <span>案件備考</span>
+          <p id="previewProjectNote"></p>
+        </div>
         <table class="pdf-table">
           <thead>
             <tr>
               <th>No.</th>
+              <th>記号</th>
               <th>ガラス種類</th>
               <th>幅 W</th>
               <th>高さ H</th>

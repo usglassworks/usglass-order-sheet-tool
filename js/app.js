@@ -7,7 +7,9 @@
   const state = {
     id: null,
     name: "",
-    pickupDate: "",
+    deliveryDate: "",
+    deliveryMethod: "配送",
+    projectNote: "",
     items: [],
     editingId: null
   };
@@ -25,12 +27,14 @@
 
   function cacheElements() {
     [
-      "inputScreen", "previewScreen", "projectName", "pickupDate", "itemForm",
-      "glassType", "width", "height", "quantity", "note", "submitItemBtn",
+      "inputScreen", "previewScreen", "projectName", "deliveryDate", "deliveryMethod",
+      "projectNote", "itemForm", "symbol", "glassType", "width", "height", "quantity",
+      "process", "note", "submitItemBtn",
       "cancelEditBtn", "itemsBody", "itemCount", "showPreviewBtn",
       "backToInputBtn", "downloadPdfBtn", "saveProjectBtn", "loadProjectBtn",
-      "newProjectBtn", "loadDialog", "savedProjectsList", "toast",
-      "previewProjectName", "previewPickupDate", "previewTotalQty", "previewBody"
+      "importJsonBtn", "jsonFileInput", "newProjectBtn", "loadDialog", "savedProjectsList", "toast",
+      "previewProjectName", "previewDeliveryDate", "previewDeliveryMethod",
+      "previewProjectNoteWrap", "previewProjectNote", "previewTotalQty", "previewBody"
     ].forEach((id) => {
       el[id] = document.getElementById(id);
     });
@@ -43,8 +47,20 @@
       renderPreview();
     });
 
-    el.pickupDate.addEventListener("input", () => {
-      state.pickupDate = el.pickupDate.value;
+    el.deliveryDate.addEventListener("input", () => {
+      state.deliveryDate = el.deliveryDate.value;
+      persistCurrent();
+      renderPreview();
+    });
+
+    el.deliveryMethod.addEventListener("change", () => {
+      state.deliveryMethod = el.deliveryMethod.value;
+      persistCurrent();
+      renderPreview();
+    });
+
+    el.projectNote.addEventListener("input", () => {
+      state.projectNote = el.projectNote.value.trim();
       persistCurrent();
       renderPreview();
     });
@@ -56,7 +72,77 @@
     el.downloadPdfBtn.addEventListener("click", downloadPdf);
     el.saveProjectBtn.addEventListener("click", saveProject);
     el.loadProjectBtn.addEventListener("click", openLoadDialog);
+    el.importJsonBtn.addEventListener("click", () => el.jsonFileInput.click());
+    el.jsonFileInput.addEventListener("change", importJsonFile);
     el.newProjectBtn.addEventListener("click", newProject);
+  }
+
+  function importJsonFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        importOrderJson(JSON.parse(String(reader.result || "")));
+      } catch (error) {
+        toast(`JSON読込に失敗しました: ${error.message}`);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function importOrderJson(json) {
+    if (!json || !Array.isArray(json.items)) {
+      toast("items配列があるJSONを選択してください");
+      return;
+    }
+
+    const importedItems = json.items.map(convertImportItem).filter(Boolean);
+    if (importedItems.length === 0) {
+      toast("取込できる明細がありません");
+      return;
+    }
+
+    Object.assign(state, {
+      id: state.id || uid(),
+      name: typeof json.projectName === "string" ? json.projectName : state.name,
+      items: importedItems,
+      editingId: null
+    });
+
+    resetItemForm();
+    persistCurrent();
+    saveImportedProject();
+    renderAll();
+    showInput();
+    toast(`${importedItems.length}件をJSONから読み込みました`);
+  }
+
+  function convertImportItem(raw) {
+    raw = raw || {};
+    const width = toPositiveInt(raw.width_mm ?? raw.width ?? raw.w);
+    const height = toPositiveInt(raw.height_mm ?? raw.height ?? raw.h);
+    const glassType = String(raw.glass_type ?? raw.glassType ?? raw.glass ?? "").trim();
+    if (!width || !height || !glassType) return null;
+
+    return {
+      id: uid(),
+      symbol: String(raw.symbol ?? "").trim(),
+      glassType,
+      width,
+      height,
+      quantity: toPositiveInt(raw.qty ?? raw.quantity ?? raw.count) || 1,
+      process: String(raw.process ?? raw.processing ?? "").trim(),
+      note: String(raw.note ?? raw.notes ?? "").trim()
+    };
+  }
+
+  function saveImportedProject() {
+    const projects = getProjects();
+    projects[state.id] = snapshot();
+    setProjects(projects);
   }
 
   function onSubmitItem(event) {
@@ -81,10 +167,12 @@
   }
 
   function readItemForm() {
+    const symbol = el.symbol.value.trim();
     const glassType = el.glassType.value.trim();
     const width = toPositiveInt(el.width.value);
     const height = toPositiveInt(el.height.value);
     const quantity = toPositiveInt(el.quantity.value) || 1;
+    const process = el.process.value.trim();
     const note = el.note.value.trim();
 
     if (!glassType) {
@@ -99,7 +187,7 @@
       return null;
     }
 
-    return { glassType, width, height, quantity, note };
+    return { symbol, glassType, width, height, quantity, process, note };
   }
 
   function resetItemForm() {
@@ -119,10 +207,12 @@
     const item = state.items.find((row) => row.id === id);
     if (!item) return;
     state.editingId = id;
+    el.symbol.value = item.symbol || "";
     el.glassType.value = item.glassType;
     el.width.value = item.width;
     el.height.value = item.height;
     el.quantity.value = item.quantity;
+    el.process.value = item.process || "";
     el.note.value = item.note;
     el.submitItemBtn.textContent = "明細を更新";
     el.cancelEditBtn.hidden = false;
@@ -145,24 +235,27 @@
 
   function renderProjectFields() {
     el.projectName.value = state.name || "";
-    el.pickupDate.value = state.pickupDate || "";
+    el.deliveryDate.value = state.deliveryDate || "";
+    el.deliveryMethod.value = state.deliveryMethod || "配送";
+    el.projectNote.value = state.projectNote || "";
   }
 
   function renderItems() {
     el.itemCount.textContent = `${state.items.length}件`;
 
     if (state.items.length === 0) {
-      el.itemsBody.innerHTML = `<tr><td class="empty" colspan="6">明細がありません</td></tr>`;
+      el.itemsBody.innerHTML = `<tr><td class="empty" colspan="7">明細がありません</td></tr>`;
       return;
     }
 
     el.itemsBody.innerHTML = state.items.map((item, index) => `
       <tr>
         <td>${index + 1}</td>
+        <td>${escapeHtml(item.symbol || "")}</td>
         <td>${escapeHtml(item.glassType)}</td>
         <td>${item.width} x ${item.height}</td>
         <td>${item.quantity}</td>
-        <td>${escapeHtml(item.note || "")}</td>
+        <td>${escapeHtml(formatItemNote(item))}</td>
         <td>
           <div class="row-actions">
             <button class="btn secondary" type="button" data-edit="${item.id}">編集</button>
@@ -182,22 +275,26 @@
 
   function renderPreview() {
     el.previewProjectName.textContent = state.name || "-";
-    el.previewPickupDate.textContent = state.pickupDate ? formatDate(state.pickupDate) : "-";
+    el.previewDeliveryDate.textContent = state.deliveryDate ? formatDate(state.deliveryDate) : "-";
+    el.previewDeliveryMethod.textContent = state.deliveryMethod || "配送";
+    el.previewProjectNote.textContent = state.projectNote || "";
+    el.previewProjectNoteWrap.hidden = !state.projectNote;
     el.previewTotalQty.textContent = String(totalQuantity());
 
     if (state.items.length === 0) {
-      el.previewBody.innerHTML = `<tr><td colspan="6">明細なし</td></tr>`;
+      el.previewBody.innerHTML = `<tr><td colspan="7">明細なし</td></tr>`;
       return;
     }
 
     el.previewBody.innerHTML = state.items.map((item, index) => `
       <tr>
         <td>${index + 1}</td>
+        <td>${escapeHtml(item.symbol || "")}</td>
         <td>${escapeHtml(item.glassType)}</td>
         <td>${item.width}</td>
         <td>${item.height}</td>
         <td>${item.quantity}</td>
-        <td>${escapeHtml(item.note || "")}</td>
+        <td>${escapeHtml(formatItemNote(item))}</td>
       </tr>
     `).join("");
   }
@@ -238,7 +335,7 @@
     const pageWidth = doc.internal.pageSize.getWidth();
     const title = "寸法注文票";
     const projectName = state.name || "未設定";
-    const pickupDate = state.pickupDate ? formatDate(state.pickupDate) : "-";
+    const deliveryDate = state.deliveryDate ? formatDate(state.deliveryDate) : "-";
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(18);
@@ -246,30 +343,36 @@
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.text(`Project: ${projectName}`, 14, 31);
-    doc.text(`Pickup: ${pickupDate}`, 14, 38);
+    doc.text(`Delivery: ${deliveryDate}`, 14, 38);
+    doc.text(`Method: ${state.deliveryMethod || "Delivery"}`, 75, 38);
     doc.text(`Total Qty: ${totalQuantity()}`, 150, 38);
+    if (state.projectNote) {
+      doc.text(`Project Note: ${state.projectNote}`, 14, 45, { maxWidth: 180 });
+    }
 
     const rows = state.items.map((item, index) => [
       index + 1,
+      item.symbol || "",
       item.glassType,
       item.width,
       item.height,
       item.quantity,
-      item.note || ""
+      formatItemNote(item)
     ]);
 
     if (typeof doc.autoTable === "function") {
       doc.autoTable({
-        startY: 46,
-        head: [["No.", "Glass Type", "W", "H", "Qty", "Note"]],
-        body: rows.length ? rows : [["", "No items", "", "", "", ""]],
+        startY: state.projectNote ? 55 : 46,
+        head: [["No.", "Symbol", "Glass Type", "W", "H", "Qty", "Note"]],
+        body: rows.length ? rows : [["", "", "No items", "", "", "", ""]],
         styles: { font: "helvetica", fontSize: 9, cellPadding: 2.5 },
         headStyles: { fillColor: [20, 84, 156] },
         columnStyles: {
           0: { halign: "center", cellWidth: 12 },
-          2: { halign: "right", cellWidth: 20 },
-          3: { halign: "right", cellWidth: 20 },
-          4: { halign: "center", cellWidth: 18 }
+          1: { cellWidth: 20 },
+          3: { halign: "right", cellWidth: 18 },
+          4: { halign: "right", cellWidth: 18 },
+          5: { halign: "center", cellWidth: 16 }
         },
         margin: { left: 14, right: 14 }
       });
@@ -317,7 +420,7 @@
       <div class="saved-item">
         <div>
           <strong>${escapeHtml(project.name || "無題")}</strong>
-          <span>${project.pickupDate ? formatDate(project.pickupDate) : "引取日未設定"} / ${project.items.length}件</span>
+          <span>${project.deliveryDate ? formatDate(project.deliveryDate) : "納品日未設定"} / ${project.deliveryMethod || "配送"} / ${project.items.length}件</span>
         </div>
         <div class="saved-actions">
           <button class="btn secondary" type="button" data-load="${project.id}">読込</button>
@@ -359,7 +462,9 @@
     Object.assign(state, {
       id: null,
       name: "",
-      pickupDate: "",
+      deliveryDate: "",
+      deliveryMethod: "配送",
+      projectNote: "",
       items: [],
       editingId: null
     });
@@ -372,7 +477,9 @@
 
   function syncProjectFields() {
     state.name = el.projectName.value.trim();
-    state.pickupDate = el.pickupDate.value;
+    state.deliveryDate = el.deliveryDate.value;
+    state.deliveryMethod = el.deliveryMethod.value || "配送";
+    state.projectNote = el.projectNote.value.trim();
   }
 
   function persistCurrent() {
@@ -405,7 +512,9 @@
     return {
       id: state.id,
       name: state.name,
-      pickupDate: state.pickupDate,
+      deliveryDate: state.deliveryDate,
+      deliveryMethod: state.deliveryMethod,
+      projectNote: state.projectNote,
       items: state.items.map((item) => ({ ...item })),
       updatedAt: new Date().toISOString()
     };
@@ -415,13 +524,17 @@
     return {
       id: project.id || null,
       name: project.name || "",
-      pickupDate: project.pickupDate || "",
+      deliveryDate: project.deliveryDate || project.pickupDate || "",
+      deliveryMethod: project.deliveryMethod || "配送",
+      projectNote: project.projectNote || "",
       items: Array.isArray(project.items) ? project.items.map((item) => ({
         id: item.id || uid(),
+        symbol: item.symbol || "",
         glassType: item.glassType || "",
         width: toPositiveInt(item.width),
         height: toPositiveInt(item.height),
         quantity: toPositiveInt(item.quantity) || 1,
+        process: item.process || "",
         note: item.note || ""
       })).filter((item) => item.glassType && item.width && item.height) : []
     };
@@ -431,10 +544,16 @@
     return state.items.reduce((sum, item) => sum + (toPositiveInt(item.quantity) || 0), 0);
   }
 
+  function formatItemNote(item) {
+    return [item.process, item.note].map((value) => String(value || "").trim()).filter(Boolean).join(" / ");
+  }
+
   function hasNonAsciiPdfText() {
     const values = [
       state.name,
-      ...state.items.flatMap((item) => [item.glassType, item.note])
+      state.deliveryMethod,
+      state.projectNote,
+      ...state.items.flatMap((item) => [item.symbol, item.glassType, item.process, item.note])
     ];
     return values.some((value) => /[^\x00-\x7F]/.test(String(value || "")));
   }
