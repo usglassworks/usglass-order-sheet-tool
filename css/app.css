@@ -32,6 +32,7 @@ body {
 
 button,
 input,
+legend,
 select,
 textarea {
   font: inherit;
@@ -185,9 +186,12 @@ main {
 .field {
   display: grid;
   gap: 5px;
+  min-width: 0;
+  position: relative;
 }
 
-.field span {
+.field span,
+.field legend {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
@@ -196,21 +200,113 @@ main {
 .field input,
 .field select,
 .field textarea {
+  -webkit-appearance: none;
+  appearance: none;
+  background: #fff;
   border: 1.5px solid var(--line);
   border-radius: 6px;
-  min-height: 42px;
-  padding: 8px 10px;
+  min-height: 48px;
+  padding: 11px 12px;
+  position: relative;
+  touch-action: manipulation;
   width: 100%;
+  z-index: 1;
 }
 
 .field textarea {
   resize: vertical;
 }
 
+.field input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  line-height: 1.4;
+  min-height: 52px;
+}
+
+.field input[type="date"]::-webkit-date-and-time-value {
+  min-height: 28px;
+  text-align: left;
+}
+
+.field input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  min-height: 32px;
+  min-width: 32px;
+  opacity: 1;
+  padding: 8px;
+}
+
 .field input:focus,
 .field select:focus,
 .field textarea:focus {
   border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(20, 84, 156, 0.14);
+  outline: none;
+}
+
+.choice-field {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.choice-field legend {
+  display: block;
+  margin: 0 0 5px;
+  padding: 0;
+}
+
+.segmented-options {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 52px;
+  position: relative;
+  z-index: 2;
+}
+
+.segmented-options label {
+  cursor: pointer;
+  display: block;
+  min-width: 0;
+  position: relative;
+  touch-action: manipulation;
+}
+
+.segmented-options input {
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  width: 1px;
+}
+
+.segmented-options span {
+  align-items: center;
+  background: #fff;
+  border: 1.5px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  display: flex;
+  font-size: 14px;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 52px;
+  padding: 12px;
+  position: relative;
+  text-align: center;
+  width: 100%;
+  z-index: 1;
+}
+
+.segmented-options input:checked + span {
+  background: #e9f2fb;
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.segmented-options input:focus-visible + span {
   box-shadow: 0 0 0 3px rgba(20, 84, 156, 0.14);
   outline: none;
 }
@@ -497,6 +593,28 @@ dialog::backdrop {
   .pdf-meta div {
     border-bottom: 1px solid var(--line);
     border-right: 0;
+  }
+
+  .field input,
+  .field select,
+  .field textarea {
+    font-size: 16px;
+    min-height: 52px;
+  }
+
+  .field input[type="date"] {
+    min-height: 56px;
+    padding-bottom: 12px;
+    padding-top: 12px;
+  }
+
+  .segmented-options {
+    min-height: 56px;
+  }
+
+  .segmented-options span {
+    font-size: 16px;
+    min-height: 56px;
   }
 }
 
