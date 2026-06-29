@@ -41,13 +41,19 @@
               <span>納品日</span>
               <input id="deliveryDate" type="date">
             </label>
-            <label class="field">
-              <span>配送 or 引き取り</span>
-              <select id="deliveryMethod">
-                <option value="配送">配送</option>
-                <option value="引き取り">引き取り</option>
-              </select>
-            </label>
+            <fieldset class="field choice-field" id="deliveryMethodGroup">
+              <legend>配送 or 引き取り</legend>
+              <div class="segmented-options">
+                <label>
+                  <input type="radio" name="deliveryMethod" value="配送" checked>
+                  <span>配送</span>
+                </label>
+                <label>
+                  <input type="radio" name="deliveryMethod" value="引き取り">
+                  <span>引き取り</span>
+                </label>
+              </div>
+            </fieldset>
             <label class="field span-all">
               <span>案件備考</span>
               <textarea id="projectNote" rows="2" placeholder="案件全体の連絡事項"></textarea>

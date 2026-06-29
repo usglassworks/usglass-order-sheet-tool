@@ -27,7 +27,7 @@
 
   function cacheElements() {
     [
-      "inputScreen", "previewScreen", "projectName", "deliveryDate", "deliveryMethod",
+      "inputScreen", "previewScreen", "projectName", "deliveryDate", "deliveryMethodGroup",
       "projectNote", "itemForm", "symbol", "glassType", "width", "height", "quantity",
       "process", "note", "submitItemBtn",
       "cancelEditBtn", "itemsBody", "itemCount", "showPreviewBtn",
@@ -38,6 +38,7 @@
     ].forEach((id) => {
       el[id] = document.getElementById(id);
     });
+    el.deliveryMethodOptions = document.querySelectorAll('input[name="deliveryMethod"]');
   }
 
   function bindEvents() {
@@ -53,10 +54,12 @@
       renderPreview();
     });
 
-    el.deliveryMethod.addEventListener("change", () => {
-      state.deliveryMethod = el.deliveryMethod.value;
-      persistCurrent();
-      renderPreview();
+    el.deliveryMethodOptions.forEach((option) => {
+      option.addEventListener("change", () => {
+        state.deliveryMethod = getDeliveryMethod();
+        persistCurrent();
+        renderPreview();
+      });
     });
 
     el.projectNote.addEventListener("input", () => {
@@ -236,7 +239,7 @@
   function renderProjectFields() {
     el.projectName.value = state.name || "";
     el.deliveryDate.value = state.deliveryDate || "";
-    el.deliveryMethod.value = state.deliveryMethod || "配送";
+    setDeliveryMethod(state.deliveryMethod || "配送");
     el.projectNote.value = state.projectNote || "";
   }
 
@@ -478,7 +481,7 @@
   function syncProjectFields() {
     state.name = el.projectName.value.trim();
     state.deliveryDate = el.deliveryDate.value;
-    state.deliveryMethod = el.deliveryMethod.value || "配送";
+    state.deliveryMethod = getDeliveryMethod();
     state.projectNote = el.projectNote.value.trim();
   }
 
@@ -546,6 +549,17 @@
 
   function formatItemNote(item) {
     return [item.process, item.note].map((value) => String(value || "").trim()).filter(Boolean).join(" / ");
+  }
+
+  function getDeliveryMethod() {
+    return document.querySelector('input[name="deliveryMethod"]:checked')?.value || "配送";
+  }
+
+  function setDeliveryMethod(value) {
+    const method = value === "引き取り" ? "引き取り" : "配送";
+    el.deliveryMethodOptions.forEach((option) => {
+      option.checked = option.value === method;
+    });
   }
 
   function hasNonAsciiPdfText() {
